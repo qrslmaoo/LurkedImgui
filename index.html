@@ -22,7 +22,7 @@
           <button class="tool-btn" data-add="title" title="Add plain title text">Title</button>
           <button class="tool-btn" data-add="text" title="Add text">Text</button>
           <button class="tool-btn" data-add="button" title="Add button">Button</button>
-          <button class="tool-btn" data-add="checkbox" title="Add checkbox">Check</button>
+          <button class="tool-btn" data-add="checkbox" title="Add checkbox">Checkbox</button>
           <button class="tool-btn" data-add="slider" title="Add slider">Slider</button>
           <button class="tool-btn" data-add="input" title="Add input">Input</button>
           <button class="tool-btn" data-add="box" title="Add box">Box</button>
@@ -69,6 +69,16 @@
           Slide distance
           <input id="pageTransitionDistance" type="number" min="0" max="160" value="32">
         </label>
+      </section>
+
+      <section class="panel">
+        <h2>Starter Layouts</h2>
+        <div class="tool-grid">
+          <button class="tool-btn" data-starter="login">Login</button>
+          <button class="tool-btn" data-starter="loader">Loader</button>
+          <button class="tool-btn" data-starter="dashboard">Dashboard</button>
+          <button class="tool-btn" data-starter="flow">Login Flow</button>
+        </div>
       </section>
 
       <section class="panel">
@@ -146,8 +156,8 @@
           <select id="stylePreset"></select>
         </label>
         <div class="row-actions">
-          <button id="saveStylePresetBtn" class="secondary">Save Style</button>
-          <button id="applyStylePresetBtn" class="secondary">Apply Style</button>
+          <button id="saveStylePresetBtn" class="secondary" data-requires-selection>Save Style</button>
+          <button id="applyStylePresetBtn" class="secondary" data-requires-selection>Apply Style</button>
         </div>
       </section>
     </aside>
@@ -204,19 +214,19 @@
         </label>
         <div class="row-actions">
           <button id="selectAllBtn" class="secondary">Select All</button>
-          <button id="groupBtn" class="secondary">Group Box</button>
+          <button id="groupBtn" class="secondary" data-requires-multi>Group Box</button>
         </div>
         <div class="tool-grid">
-          <button class="tool-btn compact-tool" data-align="left">Align Left</button>
-          <button class="tool-btn compact-tool" data-align="center">Align Center</button>
-          <button class="tool-btn compact-tool" data-align="right">Align Right</button>
-          <button class="tool-btn compact-tool" data-align="top">Align Top</button>
-          <button class="tool-btn compact-tool" data-align="middle">Align Middle</button>
-          <button class="tool-btn compact-tool" data-align="bottom">Align Bottom</button>
-          <button class="tool-btn compact-tool" data-align="sameW">Same Width</button>
-          <button class="tool-btn compact-tool" data-align="sameH">Same Height</button>
+          <button class="tool-btn compact-tool" data-align="left" data-requires-multi>Align Left</button>
+          <button class="tool-btn compact-tool" data-align="center" data-requires-multi>Align Center</button>
+          <button class="tool-btn compact-tool" data-align="right" data-requires-multi>Align Right</button>
+          <button class="tool-btn compact-tool" data-align="top" data-requires-multi>Align Top</button>
+          <button class="tool-btn compact-tool" data-align="middle" data-requires-multi>Align Middle</button>
+          <button class="tool-btn compact-tool" data-align="bottom" data-requires-multi>Align Bottom</button>
+          <button class="tool-btn compact-tool" data-align="sameW" data-requires-multi>Same Width</button>
+          <button class="tool-btn compact-tool" data-align="sameH" data-requires-multi>Same Height</button>
         </div>
-        <div id="emptyInspector" class="muted">Select an item on the canvas.</div>
+        <div id="emptyInspector" class="muted">No item selected.</div>
         <div id="inspector" class="inspector hidden">
           <label>
             Label
@@ -224,21 +234,21 @@
           </label>
           <div class="split-fields">
             <label>
-              X
+              X position
               <input id="propX" type="number">
             </label>
             <label>
-              Y
+              Y position
               <input id="propY" type="number">
             </label>
           </div>
           <div class="split-fields">
             <label>
-              W
+              Width
               <input id="propW" type="number">
             </label>
             <label>
-              H
+              Height
               <input id="propH" type="number">
             </label>
           </div>
@@ -318,11 +328,11 @@
           </label>
           <div class="split-fields">
             <label>
-              Font
+              Font size
               <input id="propFontSize" type="number" min="8" max="96">
             </label>
             <label>
-              Border W
+              Border width
               <input id="propBorderWidth" type="number" min="0" max="12">
             </label>
           </div>
@@ -401,12 +411,12 @@
             Lock position
           </label>
           <div class="row-actions">
-            <button id="duplicateBtn" class="secondary">Duplicate</button>
-            <button id="deleteBtn" class="danger">Delete</button>
+            <button id="duplicateBtn" class="secondary" data-requires-selection>Duplicate</button>
+            <button id="deleteBtn" class="danger" data-requires-selection>Delete</button>
           </div>
           <div class="row-actions">
-            <button id="backBtn" class="secondary">Send Back</button>
-            <button id="frontBtn" class="secondary">Bring Front</button>
+            <button id="backBtn" class="secondary" data-requires-selection>Send Back</button>
+            <button id="frontBtn" class="secondary" data-requires-selection>Bring Front</button>
           </div>
         </div>
       </section>
@@ -425,12 +435,12 @@
       <section class="panel">
         <h2>Animations</h2>
         <div class="tool-grid">
-          <button class="tool-btn compact-tool" data-anim-preset="hoverLift">Hover Lift</button>
-          <button class="tool-btn compact-tool" data-anim-preset="hoverGlow">Hover Glow</button>
-          <button class="tool-btn compact-tool" data-anim-preset="pulse">Pulse</button>
-          <button class="tool-btn compact-tool" data-anim-preset="slideIn">Slide In</button>
-          <button class="tool-btn compact-tool" data-anim-preset="shake">Shake</button>
-          <button class="tool-btn compact-tool" data-anim-preset="fade">Fade</button>
+          <button class="tool-btn compact-tool" data-anim-preset="hoverLift" data-requires-selection>Hover Lift</button>
+          <button class="tool-btn compact-tool" data-anim-preset="hoverGlow" data-requires-selection>Hover Glow</button>
+          <button class="tool-btn compact-tool" data-anim-preset="pulse" data-requires-selection>Pulse</button>
+          <button class="tool-btn compact-tool" data-anim-preset="slideIn" data-requires-selection>Slide In</button>
+          <button class="tool-btn compact-tool" data-anim-preset="shake" data-requires-selection>Shake</button>
+          <button class="tool-btn compact-tool" data-anim-preset="fade" data-requires-selection>Fade</button>
         </div>
         <div class="split-fields">
           <label>
@@ -475,8 +485,8 @@
           </label>
         </div>
         <div class="row-actions">
-          <button id="applyAnimationBtn" class="secondary">Apply Animation</button>
-          <button id="clearAnimationBtn" class="secondary">Clear Animation</button>
+          <button id="applyAnimationBtn" class="secondary" data-requires-selection>Apply Animation</button>
+          <button id="clearAnimationBtn" class="secondary" data-requires-selection>Clear Animation</button>
         </div>
       </section>
 
@@ -500,15 +510,16 @@
           <button id="codeTab">Code</button>
         </div>
         <div class="canvas-tools">
-          <button id="undoBtn" class="icon-btn" title="Undo">U</button>
-          <button id="redoBtn" class="icon-btn" title="Redo">R</button>
-          <button id="interactionToggle" class="icon-btn" title="Test page navigation">&gt;</button>
-          <button id="gridToggle" class="icon-btn active" title="Toggle grid">#</button>
+          <button id="undoBtn" class="toolbar-btn" title="Undo the last change">Undo</button>
+          <button id="redoBtn" class="toolbar-btn" title="Redo the last undone change">Redo</button>
+          <button id="interactionToggle" class="toolbar-btn" title="Test buttons and page navigation">Play</button>
+          <button id="gridToggle" class="toolbar-btn active" title="Toggle the placement grid">Grid</button>
           <label class="snap-label" title="Snap size">
             Snap
             <input id="snapSize" type="number" min="1" max="64" value="8">
           </label>
-          <button id="clearBtn" class="icon-btn" title="Clear layout">x</button>
+          <button id="resetViewBtn" class="toolbar-btn" title="Move the preview window back to the top-left">Reset View</button>
+          <button id="clearBtn" class="toolbar-btn danger" title="Clear the current page">Clear Page</button>
         </div>
       </div>
 

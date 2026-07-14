@@ -149,6 +149,8 @@ const els = {
   status: document.getElementById("status"),
   interactionToggle: document.getElementById("interactionToggle"),
   gridToggle: document.getElementById("gridToggle"),
+  resetViewBtn: document.getElementById("resetViewBtn"),
+  clearBtn: document.getElementById("clearBtn"),
   undoBtn: document.getElementById("undoBtn"),
   redoBtn: document.getElementById("redoBtn"),
   snapSize: document.getElementById("snapSize")
@@ -165,6 +167,9 @@ init();
 function init() {
   document.querySelectorAll("[data-add]").forEach((button) => {
     button.addEventListener("click", () => armTool(button.dataset.add));
+  });
+  document.querySelectorAll("[data-starter]").forEach((button) => {
+    button.addEventListener("click", () => applyStarterLayout(button.dataset.starter));
   });
   document.getElementById("addPageBtn").addEventListener("click", addPage);
   document.getElementById("duplicatePageBtn").addEventListener("click", duplicatePage);
@@ -252,6 +257,7 @@ function init() {
     state.grid = !state.grid;
     render();
   });
+  els.resetViewBtn.addEventListener("click", resetPreviewPosition);
   els.interactionToggle.addEventListener("click", toggleInteractionMode);
   els.snapSize.addEventListener("input", () => {
     state.snapSize = clamp(parseInt(els.snapSize.value || "1", 10), 1, 64);
@@ -369,6 +375,8 @@ function renderPageControls() {
   els.pageTransitionDistance.value = state.pageTransition.distance;
   document.getElementById("deletePageBtn").disabled = state.pages.length <= 1;
   els.interactionToggle.classList.toggle("active", state.interactionMode);
+  els.interactionToggle.textContent = state.interactionMode ? "Edit" : "Play";
+  els.interactionToggle.title = state.interactionMode ? "Return to layout editing" : "Test buttons and page navigation";
   els.stage.classList.toggle("interaction-mode", state.interactionMode);
 }
 
@@ -381,6 +389,7 @@ function addPage() {
   state.selectedIds = [];
   render();
   triggerPageTransition();
+  setStatus(`Added ${page.name}.`);
 }
 
 function duplicatePage() {
@@ -404,6 +413,7 @@ function duplicatePage() {
   state.selectedIds = [];
   render();
   triggerPageTransition();
+  setStatus(`Duplicated ${source.name}.`);
 }
 
 function deletePage() {
@@ -424,6 +434,7 @@ function deletePage() {
   state.selectedIds = [];
   render();
   triggerPageTransition();
+  setStatus(`Deleted ${page.name}.`);
 }
 
 function updateActivePageName() {
@@ -483,6 +494,106 @@ function triggerPageTransition() {
   }, transition.speed + 40);
 }
 
+function addStarterItem(type, x, y, overrides = {}) {
+  addItem(type, x, y);
+  const item = selectedItem();
+  Object.assign(item, overrides);
+  item.pageId = state.activePageId;
+  return item;
+}
+
+function populateStarterPage(kind, targetPageId = "") {
+  if (kind === "login") {
+    addStarterItem("title", 72, 56, { label: "Welcome Back", w: 360, h: 44, fontSize: 28 });
+    addStarterItem("text", 72, 104, { label: "Sign in to continue", w: 280, textColor: "#aab1bb" });
+    addStarterItem("input", 72, 150, { label: "Username", value: "", w: 320, h: 34 });
+    addStarterItem("input", 72, 202, { label: "Password", value: "", w: 320, h: 34 });
+    addStarterItem("checkbox", 72, 252, { label: "Remember me", w: 180 });
+    addStarterItem("button", 72, 298, {
+      label: "Login",
+      w: 320,
+      h: 42,
+      actionType: targetPageId ? "navigate" : "none",
+      targetPageId,
+      animation: animationPreset("hoverGlow")
+    });
+    return;
+  }
+  if (kind === "loader") {
+    addStarterItem("title", 72, 72, { label: "Loading", w: 320, h: 44, fontSize: 28 });
+    addStarterItem("progress", 72, 142, { label: "Preparing...", value: 0.68, w: 420, h: 30 });
+    addStarterItem("text", 72, 194, {
+      label: "Please wait",
+      w: 220,
+      animation: animationPreset("pulse")
+    });
+    addStarterItem("button", 72, 246, {
+      label: "Continue",
+      w: 180,
+      h: 38,
+      actionType: targetPageId ? "navigate" : "none",
+      targetPageId
+    });
+    return;
+  }
+  addStarterItem("title", 56, 48, { label: "Dashboard", w: 360, h: 44, fontSize: 28 });
+  addStarterItem("text", 56, 98, { label: "Welcome to your dashboard", w: 300, textColor: "#aab1bb" });
+  addStarterItem("box", 56, 148, { label: "Overview", w: 220, h: 150 });
+  addStarterItem("box", 300, 148, { label: "Activity", w: 220, h: 150 });
+  addStarterItem("button", 56, 328, {
+    label: "Back",
+    w: 140,
+    h: 38,
+    actionType: targetPageId ? "navigate" : "none",
+    targetPageId
+  });
+}
+
+function applyStarterLayout(kind) {
+  const isFlow = kind === "flow";
+  const affectedItems = isFlow ? state.items : state.items.filter((item) => item.pageId === state.activePageId);
+  if (affectedItems.length && !confirm(isFlow ? "Replace every page with the Login Flow starter?" : "Replace the current page with this starter layout?")) {
+    return;
+  }
+  pushHistory();
+  state.interactionMode = false;
+  state.pendingType = null;
+  suppressHistory = true;
+  try {
+    if (isFlow) {
+      const loginId = uid();
+      const loaderId = uid();
+      const dashboardId = uid();
+      state.pages = [
+        { id: loginId, name: "Login" },
+        { id: loaderId, name: "Loading" },
+        { id: dashboardId, name: "Dashboard" }
+      ];
+      state.items = [];
+      state.pageTransition = { type: "fade", speed: 350, distance: 32 };
+      state.activePageId = loginId;
+      populateStarterPage("login", loaderId);
+      state.activePageId = loaderId;
+      populateStarterPage("loader", dashboardId);
+      state.activePageId = dashboardId;
+      populateStarterPage("dashboard", loginId);
+      state.activePageId = loginId;
+    } else {
+      state.items = state.items.filter((item) => item.pageId !== state.activePageId);
+      const page = activePage();
+      if (page) page.name = kind === "login" ? "Login" : kind === "loader" ? "Loading" : "Dashboard";
+      const targetPageId = state.pages.find((candidate) => candidate.id !== state.activePageId)?.id || "";
+      populateStarterPage(kind, targetPageId);
+    }
+  } finally {
+    suppressHistory = false;
+  }
+  state.selectedId = null;
+  state.selectedIds = [];
+  render();
+  setStatus(isFlow ? "Created Login, Loading, and Dashboard pages." : `Applied ${activePage()?.name || "starter"} layout.`);
+}
+
 function addItem(type, x, y) {
   const defaults = {
     title: { label: "Section Title", w: 240, h: 40, textColor: "#f0f2f4", opacity: 100, fontSize: 26, fontFamily: "sans", textSurface: "plain", visible: true, locked: false, align: "left" },
@@ -521,6 +632,7 @@ function addItem(type, x, y) {
   state.pendingType = null;
   selectItem(item.id);
   render();
+  setStatus(`Added ${item.label || item.type} to ${activePage()?.name || "page"}.`);
 }
 
 function render() {
@@ -572,6 +684,7 @@ function render() {
   renderValidation();
   renderStylePresets();
   renderAnimationControls();
+  renderSelectionAvailability();
   renderCodePreview();
 }
 
@@ -612,6 +725,20 @@ function renderThemePresetOptions() {
   const custom = selectedCustomTheme();
   if (custom) els.customThemeName.value = custom.name;
   document.getElementById("deleteThemePresetBtn").disabled = !custom;
+}
+
+function renderSelectionAvailability() {
+  const selectionCount = selectedItems().length;
+  const pageItemCount = state.items.filter((item) => item.pageId === state.activePageId).length;
+  document.querySelectorAll("[data-requires-selection]").forEach((button) => {
+    button.disabled = selectionCount === 0;
+  });
+  document.querySelectorAll("[data-requires-multi]").forEach((button) => {
+    button.disabled = selectionCount < 2;
+  });
+  document.getElementById("selectAllBtn").disabled = pageItemCount === 0;
+  els.clearBtn.disabled = pageItemCount === 0;
+  document.getElementById("applyStylePresetBtn").disabled = selectionCount === 0 || state.stylePresets.length === 0;
 }
 
 function renderFlagControls() {
@@ -909,6 +1036,15 @@ function renderPreviewPosition() {
   els.canvasWrap.style.height = `${state.windowHeight + state.previewY}px`;
 }
 
+function resetPreviewPosition() {
+  if (state.previewX === 0 && state.previewY === 0) return;
+  pushHistory();
+  state.previewX = 0;
+  state.previewY = 0;
+  render();
+  setStatus("Preview position reset.");
+}
+
 function finishDrag(event) {
   if (!drag) return;
   const moved = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
@@ -1121,11 +1257,11 @@ function renderLayers() {
     const label = document.createElement("span");
     label.textContent = item.label || item.type;
     const visible = document.createElement("button");
-    visible.title = "Toggle visible";
-    visible.textContent = item.visible === false ? "H" : "V";
+    visible.title = item.visible === false ? "Show item" : "Hide item";
+    visible.textContent = item.visible === false ? "Show" : "Hide";
     const lock = document.createElement("button");
-    lock.title = "Toggle lock";
-    lock.textContent = item.locked ? "L" : "U";
+    lock.title = item.locked ? "Unlock item position" : "Lock item position";
+    lock.textContent = item.locked ? "Unlock" : "Lock";
     row.appendChild(type);
     row.appendChild(label);
     row.appendChild(visible);
@@ -1222,6 +1358,7 @@ function applyThemePreset() {
   if (state.activeThemePreset === "blank") state.grid = false;
   if (custom) state.grid = custom.grid !== false;
   render();
+  setStatus(`Applied ${els.themePreset.options?.[els.themePreset.selectedIndex]?.text || "theme"}.`);
 }
 
 function themePresetFor(name) {
