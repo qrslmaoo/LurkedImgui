@@ -339,6 +339,23 @@ label {
   background: #15171a;
 }
 
+.topbar-primary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: max-content;
+}
+
+.autosave-status {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.autosave-status.error {
+  color: #ffdca8;
+}
+
 .segmented {
   display: inline-grid;
   grid-auto-flow: column;

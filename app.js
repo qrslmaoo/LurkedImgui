@@ -1,3 +1,5 @@
+const AUTOSAVE_KEY = "lurked-imgui-editor:autosave:v1";
+const AUTOSAVE_DELAY_MS = 250;
 const initialPageId = uid();
 
 const state = {
@@ -147,6 +149,7 @@ const els = {
   codePreview: document.getElementById("codePreview"),
   codeFileSelect: document.getElementById("codeFileSelect"),
   status: document.getElementById("status"),
+  autosaveStatus: document.getElementById("autosaveStatus"),
   interactionToggle: document.getElementById("interactionToggle"),
   gridToggle: document.getElementById("gridToggle"),
   resetViewBtn: document.getElementById("resetViewBtn"),
@@ -158,6 +161,8 @@ const els = {
 
 let drag = null;
 let pageTransitionTimer = null;
+let autosaveTimer = null;
+let autosaveReady = false;
 let suppressHistory = false;
 const undoStack = [];
 const redoStack = [];
@@ -247,6 +252,7 @@ function init() {
   document.getElementById("writeDirBtn").addEventListener("click", writeProjectDirectory);
   document.getElementById("downloadZipBtn").addEventListener("click", downloadZip);
   document.getElementById("saveLayoutBtn").addEventListener("click", saveLayout);
+  document.getElementById("resetBrowserSaveBtn").addEventListener("click", resetBrowserSave);
   document.getElementById("loadLayoutInput").addEventListener("change", loadLayout);
   document.getElementById("copyCodeBtn").addEventListener("click", copyCode);
   els.codeFileSelect.addEventListener("change", () => {
@@ -283,6 +289,7 @@ function init() {
     finishDrag(event);
     els.canvas.classList.remove("dragging-window");
     drag = null;
+    saveBrowserAutosaveNow();
   });
   document.addEventListener("keydown", (event) => {
     if (state.interactionMode) {
@@ -327,7 +334,12 @@ function init() {
     }
   });
 
+  window.addEventListener?.("pagehide", saveBrowserAutosaveNow);
+  window.addEventListener?.("beforeunload", saveBrowserAutosaveNow);
+  const restoredAutosave = restoreBrowserAutosave();
+  autosaveReady = true;
   render();
+  if (restoredAutosave) setStatus("Restored your last browser session.");
 }
 
 function uid() {
@@ -686,6 +698,7 @@ function render() {
   renderAnimationControls();
   renderSelectionAvailability();
   renderCodePreview();
+  scheduleBrowserAutosave();
 }
 
 function renderToolButtons() {
@@ -1844,6 +1857,79 @@ function saveLayout() {
   setStatus("Saved layout JSON.");
 }
 
+function browserAutosaveKey() {
+  const path = window.location?.pathname || "/";
+  return `${AUTOSAVE_KEY}:${path}`;
+}
+
+function browserStorage() {
+  try {
+    return window.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+function setAutosaveStatus(message, isError = false) {
+  els.autosaveStatus.textContent = message;
+  els.autosaveStatus.classList.toggle("error", isError);
+}
+
+function restoreBrowserAutosave() {
+  const storage = browserStorage();
+  if (!storage) {
+    setAutosaveStatus("Autosave unavailable", true);
+    return false;
+  }
+  const key = browserAutosaveKey();
+  const raw = storage.getItem(key);
+  if (!raw) return false;
+  try {
+    const saved = JSON.parse(raw);
+    const layout = saved?.layout || saved;
+    if (!layout || typeof layout !== "object") throw new Error("Invalid autosave data.");
+    restoreLayout(layout, false);
+    setAutosaveStatus("Saved locally");
+    return true;
+  } catch {
+    storage.removeItem(key);
+    setAutosaveStatus("Autosave reset", true);
+    return false;
+  }
+}
+
+function scheduleBrowserAutosave() {
+  if (!autosaveReady || !browserStorage()) return;
+  clearTimeout(autosaveTimer);
+  setAutosaveStatus("Saving...");
+  autosaveTimer = setTimeout(saveBrowserAutosaveNow, AUTOSAVE_DELAY_MS);
+}
+
+function saveBrowserAutosaveNow() {
+  const storage = browserStorage();
+  if (!autosaveReady || !storage) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = null;
+  try {
+    storage.setItem(browserAutosaveKey(), JSON.stringify({
+      version: 1,
+      savedAt: new Date().toISOString(),
+      layout: toLayout()
+    }));
+    setAutosaveStatus("Saved locally");
+  } catch {
+    setAutosaveStatus("Browser storage full", true);
+  }
+}
+
+function resetBrowserSave() {
+  if (!confirm("Reset the app and delete the layout saved in this browser?")) return;
+  autosaveReady = false;
+  clearTimeout(autosaveTimer);
+  browserStorage()?.removeItem(browserAutosaveKey());
+  window.location?.reload?.();
+}
+
 async function loadLayout(event) {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -2795,7 +2881,7 @@ function redo() {
   restoreLayout(JSON.parse(next));
 }
 
-function restoreLayout(layout) {
+function restoreLayout(layout, shouldRender = true) {
   suppressHistory = true;
   state.projectName = layout.projectName || state.projectName;
   state.windowTitle = layout.windowTitle || state.windowTitle;
@@ -2820,7 +2906,7 @@ function restoreLayout(layout) {
   state.selectedId = layout.selectedId || null;
   state.selectedIds = Array.isArray(layout.selectedIds) ? layout.selectedIds : (state.selectedId ? [state.selectedId] : []);
   suppressHistory = false;
-  render();
+  if (shouldRender) render();
 }
 
 function normalizeTheme(theme) {

@@ -495,6 +495,7 @@
         <button id="writeDirBtn" class="primary">Write Project Directory</button>
         <button id="downloadZipBtn" class="secondary">Download Zip</button>
         <button id="saveLayoutBtn" class="secondary">Save Layout</button>
+        <button id="resetBrowserSaveBtn" class="danger">Reset App</button>
         <label class="file-label">
           Load Layout
           <input id="loadLayoutInput" type="file" accept="application/json">
@@ -505,9 +506,12 @@
 
     <main class="workspace">
       <div class="topbar">
-        <div class="segmented" aria-label="View mode">
-          <button id="designTab" class="active">Design</button>
-          <button id="codeTab">Code</button>
+        <div class="topbar-primary">
+          <div class="segmented" aria-label="View mode">
+            <button id="designTab" class="active">Design</button>
+            <button id="codeTab">Code</button>
+          </div>
+          <span id="autosaveStatus" class="autosave-status" role="status">Saved locally</span>
         </div>
         <div class="canvas-tools">
           <button id="undoBtn" class="toolbar-btn" title="Undo the last change">Undo</button>
