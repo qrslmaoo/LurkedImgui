@@ -304,6 +304,7 @@ function addItem(type, x, y) {
     ...defaults[type],
     ...itemStyleForTheme(state.activeThemePreset, type)
   };
+  assignTabParent(item);
   if (type === "color" && item.fill) item.value = item.fill;
   item.animation = defaultAnimation();
   state.items.push(item);
@@ -349,6 +350,7 @@ function render() {
 
   els.stage.innerHTML = "";
   for (const item of state.items) {
+    if (!shouldRenderOnCanvas(item)) continue;
     els.stage.appendChild(renderItem(item));
   }
   renderInspector();
@@ -407,13 +409,17 @@ function renderItem(item) {
   node.addEventListener("pointerdown", (event) => beginDrag(event, item, "move"));
 
   if (item.type === "slider") {
-    node.innerHTML = `<span>${escapeHtml(item.label)}</span><span class="track"></span>`;
+    const percent = sliderPercent(item);
+    node.innerHTML = `<span>${escapeHtml(item.label)}</span><span class="track"><span class="slider-fill" style="width:${percent}%"></span></span>`;
+    const track = node.querySelector(".track");
+    track.addEventListener("pointerdown", (event) => beginValueDrag(event, item, "slider"), true);
   } else if (item.type === "input") {
     node.innerHTML = `<span>${escapeHtml(item.label)}</span><span class="field"></span>`;
   } else if (item.type === "combo") {
     node.innerHTML = `<span>${escapeHtml(item.label)}</span><span class="field">${escapeHtml(String(item.value || firstOption(item)))}</span>`;
   } else if (item.type === "progress") {
     node.innerHTML = `<span class="progress-fill" style="width:${clamp(Number(item.value ?? 0), 0, 1) * 100}%"></span><span class="progress-label">${escapeHtml(item.label)}</span>`;
+    node.addEventListener("pointerdown", (event) => beginValueDrag(event, item, "progress"), true);
   } else if (item.type === "color") {
     node.innerHTML = `<span class="color-swatch" style="background:${item.value || item.fill || "#4fb477"}"></span><span>${escapeHtml(item.label)}</span>`;
   } else if (item.type === "separator") {
@@ -615,14 +621,54 @@ function beginDrag(event, item, mode) {
 }
 
 function finishDrag(event) {
-  if (!drag || drag.mode !== "move" || drag.itemType !== "checkbox") return;
+  if (!drag || drag.mode !== "move") return;
   const moved = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
-  if (moved > 4) return;
+  if (moved > 4) {
+    for (const snapshot of drag.items || []) {
+      const movedItem = state.items.find((candidate) => candidate.id === snapshot.id);
+      if (movedItem) assignTabParent(movedItem);
+    }
+    render();
+    return;
+  }
+  if (drag.itemType !== "checkbox") return;
   const item = state.items.find((candidate) => candidate.id === drag.id);
   if (!item || item.locked) return;
   pushHistory();
   item.value = !item.value;
   render();
+}
+
+function beginValueDrag(event, item, kind) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation?.();
+  if (item.locked) return;
+  pushHistory();
+  selectItem(item.id);
+  drag = {
+    mode: "value",
+    kind,
+    id: item.id,
+    startX: event.clientX,
+    startY: event.clientY
+  };
+  updateValueFromPointer(event, item);
+  render();
+}
+
+function updateValueFromPointer(event, item) {
+  const node = document.querySelector(`[data-id="${item.id}"]`);
+  if (!node) return;
+  const rect = node.getBoundingClientRect();
+  const pct = clamp((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+  if (item.type === "slider") {
+    const min = Number(item.min ?? 0);
+    const max = Number(item.max ?? 1);
+    item.value = min + pct * (max - min);
+  } else if (item.type === "progress") {
+    item.value = pct;
+  }
 }
 
 function onPointerMove(event) {
@@ -631,7 +677,9 @@ function onPointerMove(event) {
   if (!item) return;
   const dx = event.clientX - drag.startX;
   const dy = event.clientY - drag.startY;
-  if (drag.mode === "move") {
+  if (drag.mode === "value") {
+    updateValueFromPointer(event, item);
+  } else if (drag.mode === "move") {
     for (const snapshot of drag.items) {
       const moved = state.items.find((candidate) => candidate.id === snapshot.id);
       if (!moved || moved.locked) continue;
@@ -671,12 +719,44 @@ function selectedItems() {
   return state.items.filter((item) => state.selectedIds.includes(item.id));
 }
 
+function assignTabParent(item) {
+  if (item.type === "tabs") return;
+  const parent = state.items
+    .filter((candidate) => candidate.type === "tabs" && candidate.id !== item.id && containsPoint(candidate, item.x + Math.min(12, item.w / 2), item.y + Math.min(12, item.h / 2)))
+    .at(-1);
+  if (!parent) {
+    delete item.parentTabId;
+    delete item.parentTabIndex;
+    return;
+  }
+  item.parentTabId = parent.id;
+  item.parentTabIndex = Number(parent.activeTab || 0);
+}
+
+function shouldRenderOnCanvas(item) {
+  if (!item.parentTabId) return true;
+  const parent = state.items.find((candidate) => candidate.id === item.parentTabId);
+  if (!parent || parent.type !== "tabs") return true;
+  return Number(parent.activeTab || 0) === Number(item.parentTabIndex || 0);
+}
+
+function containsPoint(item, x, y) {
+  return x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h;
+}
+
 function optionList(item) {
   return String(item.options || "").split(",").map((part) => part.trim()).filter(Boolean);
 }
 
 function firstOption(item) {
   return optionList(item)[0] || "";
+}
+
+function sliderPercent(item) {
+  const min = Number(item.min ?? 0);
+  const max = Number(item.max ?? 1);
+  if (max === min) return 0;
+  return clamp(((Number(item.value ?? min) - min) / (max - min)) * 100, 0, 100);
 }
 
 function tablePreview(item) {
@@ -1526,7 +1606,7 @@ function generateUiCpp() {
     }
   }
 
-  for (const item of state.items.filter((item) => item.visible !== false)) {
+  for (const item of state.items.filter((item) => item.visible !== false && !item.parentTabId)) {
     body.push(...cppForItem(item));
   }
 
@@ -1578,9 +1658,9 @@ ${body.length ? body.join("\n") : "    ImGui::TextUnformatted(\"Add widgets in L
 `;
 }
 
-function cppForItem(item) {
+function cppForItem(item, options = {}) {
   const anim = normalizeAnimation(item.animation);
-  const pos = animatedPosition(item);
+  const pos = options.relativeTo ? relativePosition(item, options.relativeTo) : animatedPosition(item);
   const lines = [`    ImGui::SetCursorPos(ImVec2(${pos.x}, ${pos.y}));`];
   const label = cppString(item.label || item.type);
   const name = variableName(item);
@@ -1634,7 +1714,14 @@ function cppForItem(item) {
       lines.push(`        if (ImGui::BeginTabItem(${cppString(tab)}))`);
       lines.push("        {");
       lines.push(`            ${name} = ${index};`);
-      lines.push(`            ImGui::TextUnformatted(${cppString(`${tab} content`)});`);
+      const children = state.items.filter((child) => child.visible !== false && child.parentTabId === item.id && Number(child.parentTabIndex || 0) === index);
+      if (children.length) {
+        for (const child of children) {
+          lines.push(...cppForItem(child, { relativeTo: item }).map((line) => `    ${line}`));
+        }
+      } else {
+        lines.push(`            ImGui::TextDisabled(${cppString(`${tab} is empty`)});`);
+      }
       lines.push("            ImGui::EndTabItem();");
       lines.push("        }");
     });
@@ -1727,6 +1814,12 @@ function animatedPosition(item) {
     };
   }
   return { x: `${item.x}.0f`, y: `${item.y}.0f` };
+}
+
+function relativePosition(item, parent) {
+  const x = Math.max(0, Math.round(item.x - parent.x - 8));
+  const y = Math.max(0, Math.round(item.y - parent.y - 34));
+  return { x: `${x}.0f`, y: `${y}.0f` };
 }
 
 function cppAnimationAfterItem(item, name, anim) {

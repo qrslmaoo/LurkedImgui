@@ -707,15 +707,15 @@ label {
 }
 
 .w-slider .track {
+  position: relative;
   height: 8px;
   background: #111316;
   border: 1px solid #515a66;
+  overflow: hidden;
 }
 
-.w-slider .track::after {
-  content: "";
+.slider-fill {
   display: block;
-  width: 45%;
   height: 100%;
   background: var(--accent);
 }
