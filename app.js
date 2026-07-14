@@ -1,14 +1,26 @@
+const initialPageId = uid();
+
 const state = {
   projectName: "GeneratedImGuiApp",
   windowTitle: "My ImGui Tool",
   windowWidth: 820,
   windowHeight: 560,
+  previewX: 0,
+  previewY: 0,
   projectAuthor: "LurkedAccounts",
   projectVersion: "1.0.0",
   projectBackend: "glfw-opengl",
   selectedId: null,
   selectedIds: [],
   pendingType: null,
+  pages: [{ id: initialPageId, name: "Main" }],
+  activePageId: initialPageId,
+  interactionMode: false,
+  pageTransition: {
+    type: "fade",
+    speed: 350,
+    distance: 32
+  },
   activeThemePreset: "dark",
   grid: true,
   snapSize: 8,
@@ -20,6 +32,7 @@ const state = {
     alwaysAutoResize: false
   },
   stylePresets: [],
+  customThemes: [],
   theme: {
     windowBg: "#2b3038",
     titleBg: "#20242a",
@@ -31,7 +44,7 @@ const state = {
     paddingY: 8
   },
   items: [
-    { id: uid(), type: "text", label: "Hello from ImGui", x: 26, y: 28, w: 160, h: 24, textColor: "#f0f2f4", fontSize: 14, visible: true, locked: false, align: "left" },
+    { id: uid(), type: "text", label: "Hello from ImGui", x: 26, y: 28, w: 160, h: 24, textColor: "#f0f2f4", fontSize: 14, fontFamily: "default", textSurface: "plain", visible: true, locked: false, align: "left" },
     { id: uid(), type: "button", label: "Run Action", x: 26, y: 72, w: 128, h: 32, fill: "#4b5969", border: "#12161a", radius: 4, borderWidth: 1, fontSize: 14, visible: true, locked: false, align: "center" },
     { id: uid(), type: "checkbox", label: "Enabled", x: 26, y: 120, w: 132, h: 26, value: true, textColor: "#f0f2f4", fontSize: 14, visible: true, locked: false, align: "left" },
     { id: uid(), type: "box", label: "Custom Box", x: 230, y: 28, w: 250, h: 150, fill: "#20262d", fill2: "#314353", border: "#657080", textColor: "#cfd5dc", radius: 8, gradient: true, gradientDir: "vertical", borderWidth: 1, fontSize: 12, visible: true, locked: false, align: "left" }
@@ -41,6 +54,7 @@ const state = {
 const els = {
   stage: document.getElementById("stage"),
   canvas: document.getElementById("canvas"),
+  canvasWrap: document.getElementById("canvasWrap"),
   canvasTitle: document.getElementById("canvasTitle"),
   projectName: document.getElementById("projectName"),
   windowTitle: document.getElementById("windowTitle"),
@@ -54,7 +68,13 @@ const els = {
   flagNoScrollbar: document.getElementById("flagNoScrollbar"),
   flagAlwaysAutoResize: document.getElementById("flagAlwaysAutoResize"),
   themePreset: document.getElementById("themePreset"),
+  customThemeName: document.getElementById("customThemeName"),
   stylePreset: document.getElementById("stylePreset"),
+  pageSelect: document.getElementById("pageSelect"),
+  pageName: document.getElementById("pageName"),
+  pageTransitionType: document.getElementById("pageTransitionType"),
+  pageTransitionSpeed: document.getElementById("pageTransitionSpeed"),
+  pageTransitionDistance: document.getElementById("pageTransitionDistance"),
   animType: document.getElementById("animType"),
   animTrigger: document.getElementById("animTrigger"),
   animSpeed: document.getElementById("animSpeed"),
@@ -70,6 +90,7 @@ const els = {
   themeTitleText: document.getElementById("themeTitleText"),
   themeWindowBorder: document.getElementById("themeWindowBorder"),
   themeWindowRadius: document.getElementById("themeWindowRadius"),
+  themeWindowRadiusRange: document.getElementById("themeWindowRadiusRange"),
   themeWindowOpacity: document.getElementById("themeWindowOpacity"),
   themePaddingX: document.getElementById("themePaddingX"),
   themePaddingY: document.getElementById("themePaddingY"),
@@ -91,8 +112,13 @@ const els = {
   propBorder: document.getElementById("propBorder"),
   propTextColor: document.getElementById("propTextColor"),
   propRadius: document.getElementById("propRadius"),
+  propRadiusRange: document.getElementById("propRadiusRange"),
   propOpacity: document.getElementById("propOpacity"),
   propFontSize: document.getElementById("propFontSize"),
+  propFontFamily: document.getElementById("propFontFamily"),
+  propTextSurface: document.getElementById("propTextSurface"),
+  propActionType: document.getElementById("propActionType"),
+  propTargetPage: document.getElementById("propTargetPage"),
   propBorderWidth: document.getElementById("propBorderWidth"),
   propAlign: document.getElementById("propAlign"),
   propGradientDir: document.getElementById("propGradientDir"),
@@ -111,6 +137,8 @@ const els = {
   imageField: document.getElementById("imageField"),
   imageFitField: document.getElementById("imageFitField"),
   imageAdjustFields: document.getElementById("imageAdjustFields"),
+  textSurfaceField: document.getElementById("textSurfaceField"),
+  buttonActionFields: document.getElementById("buttonActionFields"),
   imagePicker: document.getElementById("imagePicker"),
   designTab: document.getElementById("designTab"),
   codeTab: document.getElementById("codeTab"),
@@ -119,6 +147,7 @@ const els = {
   codePreview: document.getElementById("codePreview"),
   codeFileSelect: document.getElementById("codeFileSelect"),
   status: document.getElementById("status"),
+  interactionToggle: document.getElementById("interactionToggle"),
   gridToggle: document.getElementById("gridToggle"),
   undoBtn: document.getElementById("undoBtn"),
   redoBtn: document.getElementById("redoBtn"),
@@ -126,6 +155,7 @@ const els = {
 };
 
 let drag = null;
+let pageTransitionTimer = null;
 let suppressHistory = false;
 const undoStack = [];
 const redoStack = [];
@@ -135,6 +165,14 @@ init();
 function init() {
   document.querySelectorAll("[data-add]").forEach((button) => {
     button.addEventListener("click", () => armTool(button.dataset.add));
+  });
+  document.getElementById("addPageBtn").addEventListener("click", addPage);
+  document.getElementById("duplicatePageBtn").addEventListener("click", duplicatePage);
+  document.getElementById("deletePageBtn").addEventListener("click", deletePage);
+  els.pageSelect.addEventListener("change", () => setActivePage(els.pageSelect.value, true));
+  els.pageName.addEventListener("input", updateActivePageName);
+  ["pageTransitionType", "pageTransitionSpeed", "pageTransitionDistance"].forEach((key) => {
+    els[key].addEventListener(key === "pageTransitionType" ? "change" : "input", updatePageTransitionFromControls);
   });
 
   ["projectName", "windowTitle", "windowWidth", "windowHeight", "projectAuthor", "projectVersion", "projectBackend"].forEach((key) => {
@@ -161,6 +199,8 @@ function init() {
   document.getElementById("selectAllBtn").addEventListener("click", selectAllItems);
   document.getElementById("groupBtn").addEventListener("click", groupSelection);
   document.getElementById("applyThemePresetBtn").addEventListener("click", applyThemePreset);
+  document.getElementById("saveThemePresetBtn").addEventListener("click", saveCustomTheme);
+  document.getElementById("deleteThemePresetBtn").addEventListener("click", deleteCustomTheme);
   document.getElementById("saveStylePresetBtn").addEventListener("click", saveStylePreset);
   document.getElementById("applyStylePresetBtn").addEventListener("click", applyStylePreset);
   document.querySelectorAll("[data-anim-preset]").forEach((button) => {
@@ -174,11 +214,19 @@ function init() {
   ["themeWindowBg", "themeTitleBg", "themeTitleText", "themeWindowBorder", "themeWindowRadius", "themeWindowOpacity", "themePaddingX", "themePaddingY"].forEach((key) => {
     els[key].addEventListener("input", updateThemeFromControls);
   });
+  els.themeWindowRadiusRange.addEventListener("input", () => {
+    els.themeWindowRadius.value = els.themeWindowRadiusRange.value;
+    updateThemeFromControls();
+  });
 
   ["propLabel", "propX", "propY", "propW", "propH", "propMin", "propMax", "propValue", "propOptions", "propRows", "propCols", "propFill", "propFill2", "propBorder", "propTextColor", "propRadius", "propOpacity", "propFontSize", "propBorderWidth", "propCropX", "propCropY", "propZoom"].forEach((key) => {
     els[key].addEventListener("input", updateSelectedFromInspector);
   });
-  ["propAlign", "propGradientDir", "propImageFit", "propTint"].forEach((key) => {
+  els.propRadiusRange.addEventListener("input", () => {
+    els.propRadius.value = els.propRadiusRange.value;
+    updateSelectedFromInspector();
+  });
+  ["propAlign", "propGradientDir", "propImageFit", "propTint", "propFontFamily", "propTextSurface", "propActionType", "propTargetPage"].forEach((key) => {
     els[key].addEventListener("change", updateSelectedFromInspector);
   });
   els.propGradient.addEventListener("change", updateSelectedFromInspector);
@@ -204,6 +252,7 @@ function init() {
     state.grid = !state.grid;
     render();
   });
+  els.interactionToggle.addEventListener("click", toggleInteractionMode);
   els.snapSize.addEventListener("input", () => {
     state.snapSize = clamp(parseInt(els.snapSize.value || "1", 10), 1, 64);
     render();
@@ -222,12 +271,21 @@ function init() {
     }
     selectItem(null);
   });
+  els.canvasTitle.parentElement.addEventListener("pointerdown", beginWindowDrag);
   document.addEventListener("pointermove", onPointerMove);
   document.addEventListener("pointerup", (event) => {
     finishDrag(event);
+    els.canvas.classList.remove("dragging-window");
     drag = null;
   });
   document.addEventListener("keydown", (event) => {
+    if (state.interactionMode) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        toggleInteractionMode();
+      }
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !isEditingText()) {
       event.preventDefault();
       event.shiftKey ? redo() : undo();
@@ -271,15 +329,165 @@ function uid() {
 }
 
 function armTool(type) {
+  state.interactionMode = false;
   state.pendingType = state.pendingType === type ? null : type;
   setStatus(state.pendingType ? `Click the canvas to place a ${type}.` : "");
   renderToolButtons();
 }
 
+function ensurePageState() {
+  if (!Array.isArray(state.pages) || !state.pages.length) {
+    state.pages = [{ id: uid(), name: "Main" }];
+  }
+  state.pages = state.pages.map((page, index) => ({
+    id: page.id || uid(),
+    name: String(page.name || `Page ${index + 1}`)
+  }));
+  if (!state.pages.some((page) => page.id === state.activePageId)) {
+    state.activePageId = state.pages[0].id;
+  }
+  for (const item of state.items) {
+    if (!state.pages.some((page) => page.id === item.pageId)) {
+      item.pageId = state.pages[0].id;
+    }
+  }
+  state.pageTransition = normalizePageTransition(state.pageTransition);
+}
+
+function activePage() {
+  return state.pages.find((page) => page.id === state.activePageId) || state.pages[0];
+}
+
+function renderPageControls() {
+  const page = activePage();
+  els.pageSelect.innerHTML = state.pages
+    .map((candidate) => `<option value="${escapeHtml(candidate.id)}"${candidate.id === state.activePageId ? " selected" : ""}>${escapeHtml(candidate.name)}</option>`)
+    .join("");
+  els.pageName.value = page?.name || "";
+  els.pageTransitionType.value = state.pageTransition.type;
+  els.pageTransitionSpeed.value = state.pageTransition.speed;
+  els.pageTransitionDistance.value = state.pageTransition.distance;
+  document.getElementById("deletePageBtn").disabled = state.pages.length <= 1;
+  els.interactionToggle.classList.toggle("active", state.interactionMode);
+  els.stage.classList.toggle("interaction-mode", state.interactionMode);
+}
+
+function addPage() {
+  pushHistory();
+  const page = { id: uid(), name: `Page ${state.pages.length + 1}` };
+  state.pages.push(page);
+  state.activePageId = page.id;
+  state.selectedId = null;
+  state.selectedIds = [];
+  render();
+  triggerPageTransition();
+}
+
+function duplicatePage() {
+  const source = activePage();
+  if (!source) return;
+  pushHistory();
+  const page = { id: uid(), name: `${source.name} Copy` };
+  const sourceItems = state.items.filter((item) => item.pageId === source.id);
+  const idMap = new Map(sourceItems.map((item) => [item.id, uid()]));
+  const copies = sourceItems.map((item) => ({
+    ...item,
+    id: idMap.get(item.id),
+    pageId: page.id,
+    parentTabId: item.parentTabId ? idMap.get(item.parentTabId) : undefined,
+    targetPageId: item.targetPageId === source.id ? page.id : item.targetPageId
+  }));
+  state.pages.push(page);
+  state.items.push(...copies);
+  state.activePageId = page.id;
+  state.selectedId = null;
+  state.selectedIds = [];
+  render();
+  triggerPageTransition();
+}
+
+function deletePage() {
+  if (state.pages.length <= 1) return;
+  const page = activePage();
+  if (!page || !confirm(`Delete ${page.name} and its widgets?`)) return;
+  pushHistory();
+  state.pages = state.pages.filter((candidate) => candidate.id !== page.id);
+  state.items = state.items.filter((item) => item.pageId !== page.id);
+  for (const item of state.items) {
+    if (item.targetPageId === page.id) {
+      item.actionType = "none";
+      item.targetPageId = "";
+    }
+  }
+  state.activePageId = state.pages[0].id;
+  state.selectedId = null;
+  state.selectedIds = [];
+  render();
+  triggerPageTransition();
+}
+
+function updateActivePageName() {
+  const page = activePage();
+  if (!page) return;
+  pushHistory();
+  page.name = els.pageName.value.trim() || "Untitled Page";
+  render();
+}
+
+function normalizePageTransition(transition) {
+  return {
+    type: ["none", "fade", "slideIn"].includes(transition?.type) ? transition.type : "fade",
+    speed: clamp(Number(transition?.speed ?? 350), 60, 4000),
+    distance: clamp(Number(transition?.distance ?? 32), 0, 160)
+  };
+}
+
+function updatePageTransitionFromControls() {
+  pushHistory();
+  state.pageTransition = normalizePageTransition({
+    type: els.pageTransitionType.value,
+    speed: els.pageTransitionSpeed.value,
+    distance: els.pageTransitionDistance.value
+  });
+  render();
+}
+
+function setActivePage(pageId, animate = false) {
+  if (!state.pages.some((page) => page.id === pageId)) return;
+  state.activePageId = pageId;
+  state.selectedId = null;
+  state.selectedIds = [];
+  render();
+  if (animate) triggerPageTransition();
+}
+
+function toggleInteractionMode() {
+  state.interactionMode = !state.interactionMode;
+  state.pendingType = null;
+  state.selectedId = null;
+  state.selectedIds = [];
+  render();
+}
+
+function triggerPageTransition() {
+  const transition = normalizePageTransition(state.pageTransition);
+  clearTimeout(pageTransitionTimer);
+  els.stage.classList.remove("page-enter-fade", "page-enter-slide");
+  if (transition.type === "none") return;
+  els.stage.style.setProperty("--page-transition-speed", `${transition.speed}ms`);
+  els.stage.style.setProperty("--page-transition-distance", `${transition.distance}px`);
+  void els.stage.offsetWidth;
+  els.stage.classList.add(transition.type === "slideIn" ? "page-enter-slide" : "page-enter-fade");
+  pageTransitionTimer = setTimeout(() => {
+    els.stage.classList.remove("page-enter-fade", "page-enter-slide");
+  }, transition.speed + 40);
+}
+
 function addItem(type, x, y) {
   const defaults = {
-    text: { label: "Text Label", w: 130, h: 24, textColor: "#f0f2f4", opacity: 100, fontSize: 14, visible: true, locked: false, align: "left" },
-    button: { label: "Button", w: 110, h: 32, fill: "#4b5969", fill2: "#64758a", border: "#12161a", textColor: "#f4f5f6", radius: 4, opacity: 100, fontSize: 14, borderWidth: 1, visible: true, locked: false, align: "center", gradientDir: "vertical" },
+    title: { label: "Section Title", w: 240, h: 40, textColor: "#f0f2f4", opacity: 100, fontSize: 26, fontFamily: "sans", textSurface: "plain", visible: true, locked: false, align: "left" },
+    text: { label: "Text Label", w: 130, h: 24, textColor: "#f0f2f4", opacity: 100, fontSize: 14, fontFamily: "default", textSurface: "plain", visible: true, locked: false, align: "left" },
+    button: { label: "Button", w: 110, h: 32, fill: "#4b5969", fill2: "#64758a", border: "#12161a", textColor: "#f4f5f6", radius: 4, opacity: 100, fontSize: 14, borderWidth: 1, visible: true, locked: false, align: "center", gradientDir: "vertical", actionType: "none", targetPageId: "" },
     checkbox: { label: "Checkbox", w: 130, h: 26, textColor: "#f0f2f4", value: false, opacity: 100, fontSize: 14, visible: true, locked: false, align: "left" },
     slider: { label: "Slider", w: 220, h: 28, fill: "#4fb477", border: "#515a66", textColor: "#f0f2f4", value: 0.5, min: 0, max: 1, radius: 4, opacity: 100, fontSize: 14, borderWidth: 1, visible: true, locked: false, align: "left", gradientDir: "vertical" },
     input: { label: "Input", w: 220, h: 28, fill: "#171a1f", border: "#545c66", textColor: "#f0f2f4", value: "Text", radius: 3, opacity: 100, fontSize: 14, borderWidth: 1, visible: true, locked: false, align: "left" },
@@ -293,16 +501,18 @@ function addItem(type, x, y) {
     table: { label: "Table", w: 320, h: 160, fill: "#20262d", border: "#657080", textColor: "#f0f2f4", rows: 4, cols: 3, radius: 4, opacity: 100, fontSize: 12, borderWidth: 1, visible: true, locked: false, align: "left" }
   };
   pushHistory();
+  const itemType = type === "title" ? "text" : type;
   const offset = 24 + state.items.length * 14;
   const width = defaults[type].w;
   const height = defaults[type].h;
   const item = {
     id: uid(),
-    type,
+    type: itemType,
+    pageId: state.activePageId,
     x: clamp(snap(typeof x === "number" ? x : offset % Math.max(96, state.windowWidth - 260)), 0, state.windowWidth - width),
     y: clamp(snap(typeof y === "number" ? y : offset % Math.max(96, state.windowHeight - 120)), 0, state.windowHeight - 32 - height),
     ...defaults[type],
-    ...itemStyleForTheme(state.activeThemePreset, type)
+    ...itemStyleForTheme(state.activeThemePreset, itemType)
   };
   assignTabParent(item);
   if (type === "color" && item.fill) item.value = item.fill;
@@ -314,10 +524,12 @@ function addItem(type, x, y) {
 }
 
 function render() {
+  ensurePageState();
   state.windowWidth = clamp(Number(state.windowWidth) || 820, 320, 1600);
   state.windowHeight = clamp(Number(state.windowHeight) || 560, 240, 1200);
   els.canvas.style.width = `${state.windowWidth}px`;
   els.canvas.style.height = `${state.windowHeight}px`;
+  renderPreviewPosition();
   els.designView.classList.toggle("glass-backdrop", !!state.theme.glassEffect);
   els.canvas.style.background = state.theme.glassEffect ? "transparent" : state.theme.windowBg;
   els.canvas.style.borderColor = state.theme.windowBorder;
@@ -338,6 +550,7 @@ function render() {
   els.projectAuthor.value = state.projectAuthor;
   els.projectVersion.value = state.projectVersion;
   els.projectBackend.value = state.projectBackend;
+  renderThemePresetOptions();
   els.themePreset.value = state.activeThemePreset;
   renderFlagControls();
   renderThemeControls();
@@ -347,6 +560,7 @@ function render() {
   els.undoBtn.disabled = undoStack.length === 0;
   els.redoBtn.disabled = redoStack.length === 0;
   renderToolButtons();
+  renderPageControls();
 
   els.stage.innerHTML = "";
   for (const item of state.items) {
@@ -373,9 +587,31 @@ function renderThemeControls() {
   els.themeTitleText.value = state.theme.titleText;
   els.themeWindowBorder.value = state.theme.windowBorder;
   els.themeWindowRadius.value = state.theme.windowRadius;
+  els.themeWindowRadiusRange.value = state.theme.windowRadius;
   els.themeWindowOpacity.value = state.theme.windowOpacity;
   els.themePaddingX.value = state.theme.paddingX;
   els.themePaddingY.value = state.theme.paddingY;
+}
+
+function renderThemePresetOptions() {
+  const builtIns = [
+    ["blank", "Blank Slate"],
+    ["dark", "Dark Utility"],
+    ["red", "Red Black"],
+    ["blue", "Blue Gray"],
+    ["light", "Light"],
+    ["glass", "Glass"]
+  ];
+  const builtInOptions = builtIns
+    .map(([value, label]) => `<option value="${value}">${label}</option>`)
+    .join("");
+  const customOptions = state.customThemes
+    .map((theme) => `<option value="custom:${escapeHtml(theme.id)}">${escapeHtml(theme.name)}</option>`)
+    .join("");
+  els.themePreset.innerHTML = builtInOptions + customOptions;
+  const custom = selectedCustomTheme();
+  if (custom) els.customThemeName.value = custom.name;
+  document.getElementById("deleteThemePresetBtn").disabled = !custom;
 }
 
 function renderFlagControls() {
@@ -399,13 +635,16 @@ function renderItem(item) {
   node.style.borderWidth = `${Number(item.borderWidth ?? 1)}px`;
   node.style.borderRadius = `${Number(item.radius ?? 0)}px`;
   node.style.fontSize = `${Number(item.fontSize ?? 14)}px`;
+  node.style.fontFamily = fontFamilyCss(item.fontFamily);
   node.style.justifyContent = alignToJustify(item.align);
   applyVisualFill(node, item);
   applyAnimationPreview(node, item);
   node.classList.toggle("selected", state.selectedIds.includes(item.id));
   node.classList.toggle("hidden-export", item.visible === false);
   node.classList.toggle("locked", !!item.locked);
-  node.classList.toggle("item-glass", !!item.glassItem);
+  const usesGlassSurface = item.type === "text" ? item.textSurface === "glass" : !!item.glassItem;
+  node.classList.toggle("item-glass", usesGlassSurface);
+  node.classList.toggle("text-label", item.type === "text" && item.textSurface === "glass");
   node.addEventListener("pointerdown", (event) => beginDrag(event, item, "move"));
 
   if (item.type === "slider") {
@@ -459,11 +698,15 @@ function renderItem(item) {
     node.classList.toggle("checked", !!item.value);
   }
 
-  if (item.type !== "text" && item.type !== "separator") {
-    const resize = document.createElement("span");
-    resize.className = "resize";
-    resize.addEventListener("pointerdown", (event) => beginDrag(event, item, "resize"));
-    node.appendChild(resize);
+  if (state.selectedIds.includes(item.id) && !item.locked && !state.interactionMode) {
+    for (const direction of ["nw", "n", "ne", "e", "se", "s", "sw", "w"]) {
+      const resize = document.createElement("span");
+      resize.className = `resize resize-${direction}`;
+      resize.dataset.direction = direction;
+      resize.title = `Resize ${direction.toUpperCase()}`;
+      resize.addEventListener("pointerdown", (event) => beginDrag(event, item, "resize", direction));
+      node.appendChild(resize);
+    }
   }
   return node;
 }
@@ -509,6 +752,13 @@ function alignToJustify(align) {
   if (align === "center") return "center";
   if (align === "right") return "flex-end";
   return "flex-start";
+}
+
+function fontFamilyCss(fontFamily) {
+  if (fontFamily === "sans") return '"Segoe UI", Inter, Arial, sans-serif';
+  if (fontFamily === "serif") return 'Georgia, "Times New Roman", serif';
+  if (fontFamily === "mono") return '"Cascadia Code", Consolas, monospace';
+  return 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 }
 
 function defaultAnimation() {
@@ -594,9 +844,22 @@ function clearAnimation() {
   render();
 }
 
-function beginDrag(event, item, mode) {
+function beginDrag(event, item, mode, direction = "se") {
   event.preventDefault();
   event.stopPropagation();
+  if (state.interactionMode) {
+    if (["button", "checkbox"].includes(item.type)) {
+      drag = {
+        mode: "interaction",
+        id: item.id,
+        itemType: item.type,
+        startX: event.clientX,
+        startY: event.clientY
+      };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
+    return;
+  }
   if (item.locked) {
     selectItem(item.id, event.ctrlKey || event.metaKey || event.shiftKey);
     return;
@@ -614,15 +877,56 @@ function beginDrag(event, item, mode) {
     itemY: item.y,
     itemW: item.w,
     itemH: item.h,
+    itemFontSize: Number(item.fontSize ?? 14),
     itemType: item.type,
+    direction,
     items: selectedItems().map((selected) => ({ id: selected.id, x: selected.x, y: selected.y, w: selected.w, h: selected.h }))
   };
   event.currentTarget.setPointerCapture?.(event.pointerId);
 }
 
+function beginWindowDrag(event) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  pushHistory();
+  drag = {
+    mode: "window",
+    startX: event.clientX,
+    startY: event.clientY,
+    previewX: state.previewX,
+    previewY: state.previewY
+  };
+  els.canvas.classList.add("dragging-window");
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+}
+
+function renderPreviewPosition() {
+  state.previewX = clamp(Math.round(Number(state.previewX) || 0), 0, 2400);
+  state.previewY = clamp(Math.round(Number(state.previewY) || 0), 0, 1800);
+  els.canvas.style.transform = `translate(${state.previewX}px, ${state.previewY}px)`;
+  els.canvasWrap.style.width = `${state.windowWidth + state.previewX}px`;
+  els.canvasWrap.style.height = `${state.windowHeight + state.previewY}px`;
+}
+
 function finishDrag(event) {
-  if (!drag || drag.mode !== "move") return;
+  if (!drag) return;
   const moved = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+  if (drag.mode === "interaction") {
+    if (moved > 4) return;
+    const item = state.items.find((candidate) => candidate.id === drag.id);
+    if (!item) return;
+    if (item.type === "checkbox") {
+      item.value = !item.value;
+      render();
+      return;
+    }
+    if (item.type === "button" && item.actionType === "navigate") {
+      setActivePage(item.targetPageId, true);
+    }
+    return;
+  }
+  if (drag.mode !== "move") return;
   if (moved > 4) {
     for (const snapshot of drag.items || []) {
       const movedItem = state.items.find((candidate) => candidate.id === snapshot.id);
@@ -644,8 +948,10 @@ function beginValueDrag(event, item, kind) {
   event.stopPropagation();
   event.stopImmediatePropagation?.();
   if (item.locked) return;
-  pushHistory();
-  selectItem(item.id);
+  if (!state.interactionMode) {
+    pushHistory();
+    selectItem(item.id);
+  }
   drag = {
     mode: "value",
     kind,
@@ -673,7 +979,13 @@ function updateValueFromPointer(event, item) {
 
 function onPointerMove(event) {
   if (!drag) return;
-  const item = selectedItem();
+  if (drag.mode === "window") {
+    state.previewX = clamp(Math.round(drag.previewX + event.clientX - drag.startX), 0, 2400);
+    state.previewY = clamp(Math.round(drag.previewY + event.clientY - drag.startY), 0, 1800);
+    renderPreviewPosition();
+    return;
+  }
+  const item = state.items.find((candidate) => candidate.id === drag.id);
   if (!item) return;
   const dx = event.clientX - drag.startX;
   const dy = event.clientY - drag.startY;
@@ -686,11 +998,37 @@ function onPointerMove(event) {
       moved.x = clamp(smartSnapX(snapshot.x + dx, moved), 0, state.windowWidth - moved.w);
       moved.y = clamp(smartSnapY(snapshot.y + dy, moved), 0, state.windowHeight - 32 - moved.h);
     }
-  } else {
-    item.w = clamp(snap(drag.itemW + dx), ["box", "image"].includes(item.type) ? 80 : 32, state.windowWidth - item.x);
-    item.h = clamp(snap(drag.itemH + dy), ["box", "image"].includes(item.type) ? 60 : 20, state.windowHeight - 32 - item.y);
+  } else if (drag.mode === "resize") {
+    resizeDraggedItem(item, dx, dy);
   }
   render();
+}
+
+function resizeDraggedItem(item, dx, dy) {
+  const direction = drag.direction || "se";
+  const minW = ["box", "image"].includes(item.type) ? 80 : 32;
+  const minH = ["box", "image"].includes(item.type) ? 60 : 20;
+  const startLeft = drag.itemX;
+  const startTop = drag.itemY;
+  const startRight = startLeft + drag.itemW;
+  const startBottom = startTop + drag.itemH;
+  let left = startLeft;
+  let top = startTop;
+  let right = startRight;
+  let bottom = startBottom;
+
+  if (direction.includes("w")) left = clamp(snap(startLeft + dx), 0, startRight - minW);
+  if (direction.includes("e")) right = clamp(snap(startRight + dx), startLeft + minW, state.windowWidth);
+  if (direction.includes("n")) top = clamp(snap(startTop + dy), 0, startBottom - minH);
+  if (direction.includes("s")) bottom = clamp(snap(startBottom + dy), startTop + minH, state.windowHeight - 32);
+
+  item.x = left;
+  item.y = top;
+  item.w = right - left;
+  item.h = bottom - top;
+  if (item.type === "text" && (direction.includes("n") || direction.includes("s"))) {
+    item.fontSize = clamp(Math.round(drag.itemFontSize * (item.h / Math.max(1, drag.itemH))), 8, 96);
+  }
 }
 
 function selectItem(id, additive = false) {
@@ -722,7 +1060,7 @@ function selectedItems() {
 function assignTabParent(item) {
   if (item.type === "tabs") return;
   const parent = state.items
-    .filter((candidate) => candidate.type === "tabs" && candidate.id !== item.id && containsPoint(candidate, item.x + Math.min(12, item.w / 2), item.y + Math.min(12, item.h / 2)))
+    .filter((candidate) => candidate.pageId === item.pageId && candidate.type === "tabs" && candidate.id !== item.id && containsPoint(candidate, item.x + Math.min(12, item.w / 2), item.y + Math.min(12, item.h / 2)))
     .at(-1);
   if (!parent) {
     delete item.parentTabId;
@@ -734,6 +1072,7 @@ function assignTabParent(item) {
 }
 
 function shouldRenderOnCanvas(item) {
+  if (item.pageId !== state.activePageId) return false;
   if (!item.parentTabId) return true;
   const parent = state.items.find((candidate) => candidate.id === item.parentTabId);
   if (!parent || parent.type !== "tabs") return true;
@@ -772,7 +1111,7 @@ function tablePreview(item) {
 function renderLayers() {
   const query = (els.layerSearch.value || "").toLowerCase();
   els.layersList.innerHTML = "";
-  state.items.slice().reverse().forEach((item) => {
+  state.items.filter((item) => item.pageId === state.activePageId).slice().reverse().forEach((item) => {
     if (query && !`${item.label} ${item.type}`.toLowerCase().includes(query)) return;
     const row = document.createElement("div");
     row.className = "layer-row";
@@ -818,15 +1157,19 @@ function renderValidation() {
 
 function validateLayout() {
   const warnings = [];
-  for (const item of state.items) {
+  const pageItems = state.items.filter((item) => item.pageId === state.activePageId);
+  for (const item of pageItems) {
     if (!item.label && !["separator", "image"].includes(item.type)) warnings.push(`${item.type} is missing a label.`);
     if (item.x + item.w > state.windowWidth || item.y + item.h > state.windowHeight - 32) warnings.push(`${item.label || item.type} extends outside the window.`);
     if (item.type === "image" && !item.imageDataUrl) warnings.push(`${item.label || "Image"} has no selected image.`);
+    if (item.type === "button" && item.actionType === "navigate" && !state.pages.some((page) => page.id === item.targetPageId)) {
+      warnings.push(`${item.label || "Button"} has no valid target page.`);
+    }
   }
-  for (let i = 0; i < state.items.length; i++) {
-    for (let j = i + 1; j < state.items.length; j++) {
-      if (overlaps(state.items[i], state.items[j])) {
-        warnings.push(`${state.items[i].label || state.items[i].type} overlaps ${state.items[j].label || state.items[j].type}.`);
+  for (let i = 0; i < pageItems.length; i++) {
+    for (let j = i + 1; j < pageItems.length; j++) {
+      if (overlaps(pageItems[i], pageItems[j])) {
+        warnings.push(`${pageItems[i].label || pageItems[i].type} overlaps ${pageItems[j].label || pageItems[j].type}.`);
       }
     }
   }
@@ -875,11 +1218,17 @@ function applyThemePreset() {
   pushHistory();
   state.activeThemePreset = els.themePreset.value || "dark";
   state.theme = normalizeTheme(themePresetFor(state.activeThemePreset));
+  const custom = selectedCustomTheme();
+  if (state.activeThemePreset === "blank") state.grid = false;
+  if (custom) state.grid = custom.grid !== false;
   render();
 }
 
 function themePresetFor(name) {
+  const custom = customThemeByValue(name);
+  if (custom) return custom.theme;
   const presets = {
+    blank: { windowBg: "#000000", titleBg: "#000000", titleText: "#ffffff", windowBorder: "#000000", windowRadius: 0, windowOpacity: 100, paddingX: 8, paddingY: 8 },
     dark: { windowBg: "#2b3038", titleBg: "#20242a", titleText: "#f4f5f6", windowBorder: "#111316", windowRadius: 0, windowOpacity: 100, paddingX: 8, paddingY: 8 },
     red: { windowBg: "#1d1416", titleBg: "#3b151c", titleText: "#ffe5e8", windowBorder: "#793840", windowRadius: 6, windowOpacity: 100, paddingX: 10, paddingY: 10 },
     blue: { windowBg: "#202833", titleBg: "#26384f", titleText: "#e6f1ff", windowBorder: "#526b8a", windowRadius: 6, windowOpacity: 100, paddingX: 10, paddingY: 10 },
@@ -891,26 +1240,96 @@ function themePresetFor(name) {
 
 function itemStyleForTheme(name, type) {
   const styles = {
+    blank: { fill: "#0c0c0c", fill2: "#171717", border: "#303030", textColor: "#ffffff", radius: 0, opacity: 100, borderWidth: 1, gradient: false },
     dark: { fill: "#4b5969", fill2: "#64758a", border: "#12161a", textColor: "#f4f5f6", radius: 4, opacity: 100, borderWidth: 1, gradient: false },
     red: { fill: "#3b151c", fill2: "#6f2631", border: "#a94b58", textColor: "#ffe5e8", radius: 6, opacity: 100, borderWidth: 1, gradient: true, gradientDir: "vertical" },
     blue: { fill: "#26384f", fill2: "#385a7c", border: "#6f91b8", textColor: "#e6f1ff", radius: 6, opacity: 100, borderWidth: 1, gradient: true, gradientDir: "vertical" },
     light: { fill: "#d7dde5", fill2: "#f4f6f8", border: "#9da8b5", textColor: "#15171a", radius: 4, opacity: 100, borderWidth: 1, gradient: true, gradientDir: "vertical" },
     glass: { fill: "#f7fbff", fill2: "#b7dcff", border: "#ffffff", textColor: "#f7fbff", radius: 16, opacity: 72, borderWidth: 1, gradient: true, gradientDir: "diagonal", glassItem: true }
   };
-  const style = { ...(styles[name] || styles.dark) };
+  const custom = customThemeByValue(name);
+  const style = { ...(custom?.itemStyle || styles[name] || styles.dark) };
   if (["text", "checkbox", "separator"].includes(type)) {
     delete style.fill;
     delete style.fill2;
     delete style.gradient;
   }
+  if (type === "text") {
+    delete style.glassItem;
+  }
   if (type === "progress") {
-    style.fill = name === "glass" ? "#ffffff" : style.fill;
-    style.fill2 = name === "glass" ? "#7bc8ff" : style.fill2;
+    style.fill = style.glassItem ? "#ffffff" : style.fill;
+    style.fill2 = style.glassItem ? "#7bc8ff" : style.fill2;
   }
   if (type === "image") {
-    style.tint = name === "glass" ? "#ffffff" : undefined;
+    style.tint = style.glassItem ? "#ffffff" : undefined;
   }
   return Object.fromEntries(Object.entries(style).filter(([, value]) => value !== undefined));
+}
+
+function customThemeByValue(value) {
+  if (!String(value || "").startsWith("custom:")) return null;
+  const id = String(value).slice("custom:".length);
+  return state.customThemes.find((theme) => theme.id === id) || null;
+}
+
+function normalizeCustomThemes(themes) {
+  if (!Array.isArray(themes)) return [];
+  return themes.map((theme, index) => ({
+    id: theme.id || uid(),
+    name: String(theme.name || `Custom Theme ${index + 1}`),
+    theme: normalizeTheme(theme.theme || {}),
+    grid: theme.grid !== false,
+    itemStyle: theme.itemStyle && typeof theme.itemStyle === "object" ? { ...theme.itemStyle } : {}
+  }));
+}
+
+function selectedCustomTheme() {
+  return customThemeByValue(state.activeThemePreset);
+}
+
+function themeItemStyleSnapshot() {
+  const base = {
+    ...itemStyleForTheme(state.activeThemePreset, "button")
+  };
+  const item = selectedItem();
+  if (!item) return base;
+  const keys = ["fill", "fill2", "border", "textColor", "radius", "opacity", "borderWidth", "gradient", "gradientDir", "glassItem", "fontFamily"];
+  for (const key of keys) {
+    if (item[key] !== undefined) base[key] = item[key];
+  }
+  return base;
+}
+
+function saveCustomTheme() {
+  pushHistory();
+  const current = selectedCustomTheme();
+  const name = els.customThemeName.value.trim() || current?.name || `Custom Theme ${state.customThemes.length + 1}`;
+  const snapshot = {
+    id: current?.id || uid(),
+    name,
+    theme: normalizeTheme(state.theme),
+    grid: state.grid,
+    itemStyle: themeItemStyleSnapshot()
+  };
+  if (current) {
+    Object.assign(current, snapshot);
+  } else {
+    state.customThemes.push(snapshot);
+  }
+  state.activeThemePreset = `custom:${snapshot.id}`;
+  render();
+  setStatus(`Saved theme ${name}.`);
+}
+
+function deleteCustomTheme() {
+  const current = selectedCustomTheme();
+  if (!current) return;
+  pushHistory();
+  state.customThemes = state.customThemes.filter((theme) => theme.id !== current.id);
+  state.activeThemePreset = "dark";
+  state.theme = normalizeTheme(themePresetFor("dark"));
+  render();
 }
 
 function saveStylePreset() {
@@ -941,7 +1360,7 @@ function applyStylePreset() {
 }
 
 function pickStyle(item) {
-  const keys = ["fill", "fill2", "border", "textColor", "radius", "opacity", "fontSize", "borderWidth", "align", "gradient", "gradientDir", "glassItem", "imageFit", "tint", "cropX", "cropY", "zoom"];
+  const keys = ["fill", "fill2", "border", "textColor", "radius", "opacity", "fontSize", "fontFamily", "textSurface", "borderWidth", "align", "gradient", "gradientDir", "glassItem", "imageFit", "tint", "cropX", "cropY", "zoom"];
   return Object.fromEntries(keys.filter((key) => item[key] !== undefined).map((key) => [key, item[key]]));
 }
 
@@ -966,8 +1385,19 @@ function renderInspector() {
   els.propBorder.value = item.border || "#657080";
   els.propTextColor.value = item.textColor || "#f4f5f6";
   els.propRadius.value = item.radius ?? 0;
+  els.propRadiusRange.value = item.radius ?? 0;
   els.propOpacity.value = item.opacity ?? 100;
   els.propFontSize.value = item.fontSize ?? 14;
+  els.propFontFamily.value = item.fontFamily || "default";
+  els.propTextSurface.value = item.textSurface || "plain";
+  els.propActionType.value = item.actionType === "navigate" ? "navigate" : "none";
+  els.propTargetPage.innerHTML = state.pages
+    .map((page) => `<option value="${escapeHtml(page.id)}"${page.id === item.targetPageId ? " selected" : ""}>${escapeHtml(page.name)}</option>`)
+    .join("");
+  if (!state.pages.some((page) => page.id === item.targetPageId)) {
+    els.propTargetPage.value = state.pages.find((page) => page.id !== item.pageId)?.id || state.pages[0]?.id || "";
+  }
+  els.propTargetPage.disabled = els.propActionType.value !== "navigate";
   els.propBorderWidth.value = item.borderWidth ?? 1;
   els.propAlign.value = item.align || "left";
   els.propGradientDir.value = item.gradientDir || "vertical";
@@ -986,6 +1416,8 @@ function renderInspector() {
   els.imageField.classList.toggle("hidden", item.type !== "image");
   els.imageFitField.classList.toggle("hidden", item.type !== "image");
   els.imageAdjustFields.classList.toggle("hidden", item.type !== "image");
+  els.textSurfaceField.classList.toggle("hidden", item.type !== "text");
+  els.buttonActionFields.classList.toggle("hidden", item.type !== "button");
   filterInspector();
 }
 
@@ -1007,7 +1439,13 @@ function updateSelectedFromInspector() {
   item.textColor = els.propTextColor.value;
   item.radius = clamp(Number(els.propRadius.value) || 0, 0, 40);
   item.opacity = clamp(Number(els.propOpacity.value) || 0, 0, 100);
-  item.fontSize = clamp(Number(els.propFontSize.value) || 14, 8, 48);
+  item.fontSize = clamp(Number(els.propFontSize.value) || 14, 8, 96);
+  item.fontFamily = ["default", "sans", "serif", "mono"].includes(els.propFontFamily.value) ? els.propFontFamily.value : "default";
+  item.textSurface = item.type === "text" && els.propTextSurface.value === "glass" ? "glass" : "plain";
+  item.actionType = item.type === "button" && els.propActionType.value === "navigate" ? "navigate" : "none";
+  item.targetPageId = item.actionType === "navigate" && state.pages.some((page) => page.id === els.propTargetPage.value)
+    ? els.propTargetPage.value
+    : "";
   item.borderWidth = clamp(Number(els.propBorderWidth.value) || 0, 0, 12);
   item.align = els.propAlign.value;
   item.gradientDir = els.propGradientDir.value;
@@ -1103,7 +1541,7 @@ function bringSelectedFront() {
 }
 
 function selectAllItems() {
-  state.selectedIds = state.items.map((item) => item.id);
+  state.selectedIds = state.items.filter((item) => item.pageId === state.activePageId).map((item) => item.id);
   state.selectedId = state.selectedIds[state.selectedIds.length - 1] || null;
   render();
 }
@@ -1141,6 +1579,7 @@ function groupSelection() {
   const group = {
     id: uid(),
     type: "box",
+    pageId: state.activePageId,
     label: "Group",
     x: clamp(minX - 12, 0, state.windowWidth - 80),
     y: clamp(minY - 12, 0, state.windowHeight - 92),
@@ -1180,7 +1619,7 @@ function nudgeSelection(key, amount) {
 function smartSnapX(value, item) {
   let result = snap(value);
   for (const other of state.items) {
-    if (other.id === item.id) continue;
+    if (other.id === item.id || other.pageId !== item.pageId) continue;
     for (const target of [other.x, other.x + other.w, other.x + Math.round(other.w / 2)]) {
       for (const sourceOffset of [0, item.w, Math.round(item.w / 2)]) {
         if (Math.abs(value + sourceOffset - target) <= 5) result = target - sourceOffset;
@@ -1193,7 +1632,7 @@ function smartSnapX(value, item) {
 function smartSnapY(value, item) {
   let result = snap(value);
   for (const other of state.items) {
-    if (other.id === item.id) continue;
+    if (other.id === item.id || other.pageId !== item.pageId) continue;
     for (const target of [other.y, other.y + other.h, other.y + Math.round(other.h / 2)]) {
       for (const sourceOffset of [0, item.h, Math.round(item.h / 2)]) {
         if (Math.abs(value + sourceOffset - target) <= 5) result = target - sourceOffset;
@@ -1204,9 +1643,10 @@ function smartSnapY(value, item) {
 }
 
 function clearLayout() {
-  if (!confirm("Clear the current layout?")) return;
+  const page = activePage();
+  if (!page || !confirm(`Clear every widget on ${page.name}?`)) return;
   pushHistory();
-  state.items = [];
+  state.items = state.items.filter((item) => item.pageId !== state.activePageId);
   state.selectedId = null;
   state.selectedIds = [];
   render();
@@ -1277,6 +1717,8 @@ async function loadLayout(event) {
     state.windowTitle = loaded.windowTitle || state.windowTitle;
     state.windowWidth = clamp(Number(loaded.windowWidth) || state.windowWidth, 320, 1600);
     state.windowHeight = clamp(Number(loaded.windowHeight) || state.windowHeight, 240, 1200);
+    state.previewX = clamp(Math.round(Number(loaded.previewX) || 0), 0, 2400);
+    state.previewY = clamp(Math.round(Number(loaded.previewY) || 0), 0, 1800);
     state.projectAuthor = loaded.projectAuthor || state.projectAuthor;
     state.projectVersion = loaded.projectVersion || state.projectVersion;
     state.projectBackend = loaded.projectBackend || state.projectBackend;
@@ -1285,6 +1727,11 @@ async function loadLayout(event) {
     state.theme = normalizeTheme(loaded.theme || state.theme);
     state.flags = normalizeFlags(loaded.flags || state.flags);
     state.stylePresets = Array.isArray(loaded.stylePresets) ? loaded.stylePresets : [];
+    state.customThemes = normalizeCustomThemes(loaded.customThemes);
+    state.pages = Array.isArray(loaded.pages) && loaded.pages.length ? loaded.pages : [{ id: uid(), name: "Main" }];
+    state.activePageId = loaded.activePageId || state.pages[0].id;
+    state.pageTransition = normalizePageTransition(loaded.pageTransition);
+    state.interactionMode = false;
     state.items = Array.isArray(loaded.items) ? loaded.items.map((item) => ({ ...item, id: item.id || uid() })) : state.items;
     state.selectedId = null;
     state.selectedIds = [];
@@ -1308,6 +1755,8 @@ function toLayout() {
     windowTitle: state.windowTitle,
     windowWidth: state.windowWidth,
     windowHeight: state.windowHeight,
+    previewX: state.previewX,
+    previewY: state.previewY,
     projectAuthor: state.projectAuthor,
     projectVersion: state.projectVersion,
     projectBackend: state.projectBackend,
@@ -1315,9 +1764,13 @@ function toLayout() {
     snapSize: state.snapSize,
     selectedId: state.selectedId,
     selectedIds: state.selectedIds,
+    pages: state.pages,
+    activePageId: state.activePageId,
+    pageTransition: state.pageTransition,
     theme: state.theme,
     flags: state.flags,
     stylePresets: state.stylePresets,
+    customThemes: state.customThemes,
     items: state.items
   };
 }
@@ -1448,6 +1901,7 @@ int main(int, char**)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     ImGui::StyleColorsDark();
+    LoadGeneratedFonts();
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
@@ -1489,6 +1943,7 @@ int main(int, char**)
 function generateHeader() {
   return `#pragma once
 
+void LoadGeneratedFonts();
 void RenderGeneratedLayout();
 `;
 }
@@ -1586,7 +2041,7 @@ ImTextureID GetGeneratedImageTexture(const char* id)
 
 function generateUiCpp() {
   const declarations = [];
-  const body = [];
+  const pageBodies = state.pages.map(() => []);
   for (const item of state.items.filter((item) => item.visible !== false)) {
     const name = variableName(item);
     if (item.type === "checkbox") {
@@ -1606,9 +2061,36 @@ function generateUiCpp() {
     }
   }
 
-  for (const item of state.items.filter((item) => item.visible !== false && !item.parentTabId)) {
-    body.push(...cppForItem(item));
-  }
+  state.pages.forEach((page, pageIndex) => {
+    for (const item of state.items.filter((item) => item.pageId === page.id && item.visible !== false && !item.parentTabId)) {
+      pageBodies[pageIndex].push(...cppForItem(item));
+    }
+  });
+
+  const transition = normalizePageTransition(state.pageTransition);
+  const startPageIndex = Math.max(0, state.pages.findIndex((page) => page.id === state.activePageId));
+  const pageCases = state.pages.map((page, index) => {
+    const lines = pageBodies[index];
+    const content = lines.length
+      ? lines.map((line) => `    ${line}`).join("\n")
+      : `        ImGui::TextDisabled(${cppString(`${page.name} is empty`)});`;
+    return `    case ${index}:
+    {
+${content}
+        break;
+    }`;
+  }).join("\n");
+  const pageProgressBody = transition.type === "none"
+    ? "    return 1.0f;"
+    : `    return ImClamp((float)((ImGui::GetTime() - g_page_transition_started) * 1000.0 / ${transition.speed.toFixed(1)}), 0.0f, 1.0f);`;
+  const pageOffsetBody = transition.type === "slideIn"
+    ? `    return (1.0f - GeneratedPageTransitionProgress()) * ${transition.distance.toFixed(1)}f;`
+    : "    return 0.0f;";
+  const pageAlphaBody = transition.type === "fade"
+    ? "    return GeneratedPageTransitionProgress();"
+    : transition.type === "slideIn"
+      ? "    return 0.35f + GeneratedPageTransitionProgress() * 0.65f;"
+      : "    return 1.0f;";
 
   return `#include "ui_layout.h"
 #include "image_loader.h"
@@ -1617,8 +2099,85 @@ function generateUiCpp() {
 
 #include <cmath>
 #include <cstring>
+#include <fstream>
 
 ${declarations.length ? declarations.join("\n") : "// No persistent widget state is required yet."}
+
+static int g_current_page = ${startPageIndex};
+static double g_page_transition_started = 0.0;
+
+static void GeneratedNavigateToPage(int page)
+{
+    if (page < 0 || page >= ${state.pages.length} || page == g_current_page)
+        return;
+    g_current_page = page;
+    g_page_transition_started = ImGui::GetTime();
+}
+
+static float GeneratedPageTransitionProgress()
+{
+${pageProgressBody}
+}
+
+static float GeneratedPageOffsetX()
+{
+${pageOffsetBody}
+}
+
+static float GeneratedPageAlpha()
+{
+${pageAlphaBody}
+}
+
+static ImFont* g_font_default = nullptr;
+static ImFont* g_font_sans = nullptr;
+static ImFont* g_font_serif = nullptr;
+static ImFont* g_font_mono = nullptr;
+
+static ImFont* LoadFirstGeneratedFont(ImGuiIO& io, const char* const* paths, int count)
+{
+    for (int i = 0; i < count; ++i)
+    {
+        if (!std::ifstream(paths[i]).good())
+            continue;
+        if (ImFont* font = io.Fonts->AddFontFromFileTTF(paths[i], 14.0f))
+            return font;
+    }
+    return g_font_default;
+}
+
+void LoadGeneratedFonts()
+{
+    ImGuiIO& io = ImGui::GetIO();
+    g_font_default = io.Fonts->AddFontDefault();
+#if defined(_WIN32)
+    const char* sans_paths[] = { "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf" };
+    const char* serif_paths[] = { "C:/Windows/Fonts/georgia.ttf", "C:/Windows/Fonts/times.ttf" };
+    const char* mono_paths[] = { "C:/Windows/Fonts/consola.ttf", "C:/Windows/Fonts/cour.ttf" };
+#elif defined(__APPLE__)
+    const char* sans_paths[] = { "/System/Library/Fonts/Supplemental/Arial.ttf" };
+    const char* serif_paths[] = { "/System/Library/Fonts/Supplemental/Georgia.ttf" };
+    const char* mono_paths[] = { "/System/Library/Fonts/Menlo.ttc" };
+#else
+    const char* sans_paths[] = { "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf" };
+    const char* serif_paths[] = { "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf" };
+    const char* mono_paths[] = { "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf" };
+#endif
+    g_font_sans = LoadFirstGeneratedFont(io, sans_paths, IM_ARRAYSIZE(sans_paths));
+    g_font_serif = LoadFirstGeneratedFont(io, serif_paths, IM_ARRAYSIZE(serif_paths));
+    g_font_mono = LoadFirstGeneratedFont(io, mono_paths, IM_ARRAYSIZE(mono_paths));
+}
+
+static ImFont* GeneratedFont(const char* family)
+{
+    if (std::strcmp(family, "sans") == 0)
+        return g_font_sans ? g_font_sans : ImGui::GetFont();
+    if (std::strcmp(family, "serif") == 0)
+        return g_font_serif ? g_font_serif : ImGui::GetFont();
+    if (std::strcmp(family, "mono") == 0)
+        return g_font_mono ? g_font_mono : ImGui::GetFont();
+    return g_font_default ? g_font_default : ImGui::GetFont();
+}
 
 static float GeneratedAnimationValue(const char* id, const char* type, const char* trigger, float speed_ms, float delay_ms)
 {
@@ -1649,7 +2208,18 @@ ${cppWindowStylePush().join("\n")}
 ${cppWindowSizeLine()}
     ImGui::Begin(${cppString(state.windowTitle)}, nullptr, ${cppWindowFlags()});
 
-${body.length ? body.join("\n") : "    ImGui::TextUnformatted(\"Add widgets in LurkedAccounts Imgui Customization Tool.\");"}
+    float generated_page_alpha = GeneratedPageAlpha();
+    bool generated_page_fading = generated_page_alpha < 0.999f;
+    if (generated_page_fading)
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * generated_page_alpha);
+    switch (g_current_page)
+    {
+${pageCases}
+    default:
+        break;
+    }
+    if (generated_page_fading)
+        ImGui::PopStyleVar();
 
     ImGui::End();
     ImGui::PopStyleColor(5);
@@ -1661,7 +2231,8 @@ ${body.length ? body.join("\n") : "    ImGui::TextUnformatted(\"Add widgets in L
 function cppForItem(item, options = {}) {
   const anim = normalizeAnimation(item.animation);
   const pos = options.relativeTo ? relativePosition(item, options.relativeTo) : animatedPosition(item);
-  const lines = [`    ImGui::SetCursorPos(ImVec2(${pos.x}, ${pos.y}));`];
+  const positionX = options.relativeTo ? pos.x : `${pos.x} + GeneratedPageOffsetX()`;
+  const lines = [`    ImGui::SetCursorPos(ImVec2(${positionX}, ${pos.y}));`];
   const label = cppString(item.label || item.type);
   const name = variableName(item);
   const style = cppStylePush(item);
@@ -1671,7 +2242,13 @@ function cppForItem(item, options = {}) {
     lines.push(...style.pop);
   } else if (item.type === "button") {
     lines.push(...style.push);
-    lines.push(`    ImGui::Button(${label}, ImVec2(${item.w}.0f, ${item.h}.0f));`);
+    const targetPageIndex = state.pages.findIndex((page) => page.id === item.targetPageId);
+    if (item.actionType === "navigate" && targetPageIndex >= 0) {
+      lines.push(`    if (ImGui::Button(${label}, ImVec2(${item.w}.0f, ${item.h}.0f)))`);
+      lines.push(`        GeneratedNavigateToPage(${targetPageIndex});`);
+    } else {
+      lines.push(`    ImGui::Button(${label}, ImVec2(${item.w}.0f, ${item.h}.0f));`);
+    }
     lines.push(...style.pop);
   } else if (item.type === "checkbox") {
     lines.push(...style.push);
@@ -1852,6 +2429,10 @@ function cppStylePush(item) {
     push.push(`    ImGui::SetWindowFontScale(${fontScale.toFixed(3)}f);`);
     pop.push("    ImGui::SetWindowFontScale(1.0f);");
   }
+  if (item.fontFamily && item.fontFamily !== "default" && !["box", "image"].includes(item.type)) {
+    push.push(`    ImGui::PushFont(GeneratedFont(${cppString(item.fontFamily)}));`);
+    pop.unshift("    ImGui::PopFont();");
+  }
   if (alpha < 1) {
     push.push(`    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ${alpha.toFixed(3)}f);`);
     vars++;
@@ -1971,7 +2552,10 @@ function generateProjectManifest(projectName) {
     version: state.projectVersion,
     backend: state.projectBackend,
     generatedBy: "LurkedAccounts Imgui Customization Tool",
-    flags: state.flags
+    flags: state.flags,
+    pages: state.pages.map((page) => ({ id: page.id, name: page.name })),
+    startPageId: state.activePageId,
+    pageTransition: state.pageTransition
   };
 }
 
@@ -2080,6 +2664,8 @@ function restoreLayout(layout) {
   state.windowTitle = layout.windowTitle || state.windowTitle;
   state.windowWidth = clamp(Number(layout.windowWidth) || state.windowWidth, 320, 1600);
   state.windowHeight = clamp(Number(layout.windowHeight) || state.windowHeight, 240, 1200);
+  state.previewX = clamp(Math.round(Number(layout.previewX) || 0), 0, 2400);
+  state.previewY = clamp(Math.round(Number(layout.previewY) || 0), 0, 1800);
   state.projectAuthor = layout.projectAuthor || state.projectAuthor;
   state.projectVersion = layout.projectVersion || state.projectVersion;
   state.projectBackend = layout.projectBackend || state.projectBackend;
@@ -2088,6 +2674,11 @@ function restoreLayout(layout) {
   state.theme = normalizeTheme(layout.theme || state.theme);
   state.flags = normalizeFlags(layout.flags || state.flags);
   state.stylePresets = Array.isArray(layout.stylePresets) ? layout.stylePresets : [];
+  state.customThemes = normalizeCustomThemes(layout.customThemes);
+  state.pages = Array.isArray(layout.pages) && layout.pages.length ? layout.pages : [{ id: uid(), name: "Main" }];
+  state.activePageId = layout.activePageId || state.pages[0].id;
+  state.pageTransition = normalizePageTransition(layout.pageTransition);
+  state.interactionMode = false;
   state.items = Array.isArray(layout.items) ? layout.items.map((item) => ({ ...item, id: item.id || uid() })) : [];
   state.selectedId = layout.selectedId || null;
   state.selectedIds = Array.isArray(layout.selectedIds) ? layout.selectedIds : (state.selectedId ? [state.selectedId] : []);

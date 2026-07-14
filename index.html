@@ -19,6 +19,7 @@
       <section class="panel">
         <h2>Add</h2>
         <div class="tool-grid">
+          <button class="tool-btn" data-add="title" title="Add plain title text">Title</button>
           <button class="tool-btn" data-add="text" title="Add text">Text</button>
           <button class="tool-btn" data-add="button" title="Add button">Button</button>
           <button class="tool-btn" data-add="checkbox" title="Add checkbox">Check</button>
@@ -33,6 +34,41 @@
           <button class="tool-btn" data-add="tabs" title="Add tabs">Tabs</button>
           <button class="tool-btn" data-add="table" title="Add table">Table</button>
         </div>
+      </section>
+
+      <section class="panel">
+        <h2>Pages</h2>
+        <label>
+          Current page
+          <select id="pageSelect"></select>
+        </label>
+        <label>
+          Page name
+          <input id="pageName" type="text" spellcheck="false">
+        </label>
+        <div class="row-actions">
+          <button id="addPageBtn" class="secondary">Add</button>
+          <button id="duplicatePageBtn" class="secondary">Duplicate</button>
+        </div>
+        <button id="deletePageBtn" class="danger">Delete Page</button>
+        <div class="split-fields">
+          <label>
+            Transition
+            <select id="pageTransitionType">
+              <option value="none">None</option>
+              <option value="fade">Fade</option>
+              <option value="slideIn">Slide In</option>
+            </select>
+          </label>
+          <label>
+            Speed ms
+            <input id="pageTransitionSpeed" type="number" min="60" max="4000" value="350">
+          </label>
+        </div>
+        <label>
+          Slide distance
+          <input id="pageTransitionDistance" type="number" min="0" max="160" value="32">
+        </label>
       </section>
 
       <section class="panel">
@@ -88,6 +124,7 @@
         <label>
           Theme preset
           <select id="themePreset">
+            <option value="blank">Blank Slate</option>
             <option value="dark">Dark Utility</option>
             <option value="red">Red Black</option>
             <option value="blue">Blue Gray</option>
@@ -97,13 +134,21 @@
         </label>
         <div class="row-actions">
           <button id="applyThemePresetBtn" class="secondary">Apply Theme</button>
-          <button id="saveStylePresetBtn" class="secondary">Save Style</button>
+          <button id="saveThemePresetBtn" class="secondary">Save Theme</button>
         </div>
+        <label>
+          Custom theme name
+          <input id="customThemeName" type="text" placeholder="My Theme" spellcheck="false">
+        </label>
+        <button id="deleteThemePresetBtn" class="danger">Delete Custom Theme</button>
         <label>
           Style preset
           <select id="stylePreset"></select>
         </label>
-        <button id="applyStylePresetBtn" class="secondary">Apply Style</button>
+        <div class="row-actions">
+          <button id="saveStylePresetBtn" class="secondary">Save Style</button>
+          <button id="applyStylePresetBtn" class="secondary">Apply Style</button>
+        </div>
       </section>
     </aside>
 
@@ -128,16 +173,17 @@
             <input id="themeWindowBorder" type="color" value="#111316">
           </label>
         </div>
-        <div class="split-fields">
-          <label>
-            Radius
+        <label>
+          Window curves
+          <div class="range-number">
+            <input id="themeWindowRadiusRange" type="range" min="0" max="40" value="0">
             <input id="themeWindowRadius" type="number" min="0" max="40" value="0">
-          </label>
-          <label>
-            Opacity
-            <input id="themeWindowOpacity" type="number" min="0" max="100" value="100">
-          </label>
-        </div>
+          </div>
+        </label>
+        <label>
+          Opacity
+          <input id="themeWindowOpacity" type="number" min="0" max="100" value="100">
+        </label>
         <div class="split-fields">
           <label>
             Padding X
@@ -214,6 +260,19 @@
             Options
             <input id="propOptions" type="text" placeholder="One, Two, Three" spellcheck="false">
           </label>
+          <div class="split-fields" id="buttonActionFields">
+            <label>
+              On click
+              <select id="propActionType">
+                <option value="none">No action</option>
+                <option value="navigate">Open page</option>
+              </select>
+            </label>
+            <label>
+              Target page
+              <select id="propTargetPage"></select>
+            </label>
+          </div>
           <div class="split-fields" id="tableFields">
             <label>
               Rows
@@ -246,24 +305,43 @@
               <input id="propTextColor" type="color">
             </label>
           </div>
-          <div class="split-fields">
-            <label>
-              Radius
+          <label>
+            Widget curves
+            <div class="range-number">
+              <input id="propRadiusRange" type="range" min="0" max="40">
               <input id="propRadius" type="number" min="0" max="40">
-            </label>
-            <label>
-              Opacity
-              <input id="propOpacity" type="number" min="0" max="100">
-            </label>
-          </div>
+            </div>
+          </label>
+          <label>
+            Opacity
+            <input id="propOpacity" type="number" min="0" max="100">
+          </label>
           <div class="split-fields">
             <label>
               Font
-              <input id="propFontSize" type="number" min="8" max="48">
+              <input id="propFontSize" type="number" min="8" max="96">
             </label>
             <label>
               Border W
               <input id="propBorderWidth" type="number" min="0" max="12">
+            </label>
+          </div>
+          <div class="split-fields">
+            <label>
+              Font preset
+              <select id="propFontFamily">
+                <option value="default">ImGui default</option>
+                <option value="sans">Clean sans</option>
+                <option value="serif">Display serif</option>
+                <option value="mono">Monospace</option>
+              </select>
+            </label>
+            <label id="textSurfaceField">
+              Text look
+              <select id="propTextSurface">
+                <option value="plain">Plain text</option>
+                <option value="glass">Glass label</option>
+              </select>
             </label>
           </div>
           <div class="split-fields">
@@ -424,6 +502,7 @@
         <div class="canvas-tools">
           <button id="undoBtn" class="icon-btn" title="Undo">U</button>
           <button id="redoBtn" class="icon-btn" title="Redo">R</button>
+          <button id="interactionToggle" class="icon-btn" title="Test page navigation">&gt;</button>
           <button id="gridToggle" class="icon-btn active" title="Toggle grid">#</button>
           <label class="snap-label" title="Snap size">
             Snap
