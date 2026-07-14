@@ -1,6 +1,6 @@
 # LurkedAccounts Imgui Customization Tool
 
-A local browser app for sketching a Dear ImGui window visually and generating a CMake-based C++ project from it.
+A browser app for sketching a Dear ImGui window visually and generating a CMake-based C++ project from it.
 
 Open `index.html` in a Chromium-based browser. Use **Write Project Directory** to choose a folder and create the generated project there. If the browser does not support directory writes, use **Download Zip**.
 
