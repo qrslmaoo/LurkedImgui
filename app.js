@@ -2305,7 +2305,7 @@ ${content}
   }).join("\n");
   const pageProgressBody = transition.type === "none"
     ? "    return 1.0f;"
-    : `    return ImClamp((float)((ImGui::GetTime() - g_page_transition_started) * 1000.0 / ${transition.speed.toFixed(1)}), 0.0f, 1.0f);`;
+    : `    return std::clamp(static_cast<float>((ImGui::GetTime() - g_page_transition_started) * 1000.0 / ${transition.speed.toFixed(1)}), 0.0f, 1.0f);`;
   const pageOffsetBody = transition.type === "slideIn"
     ? `    return (1.0f - GeneratedPageTransitionProgress()) * ${transition.distance.toFixed(1)}f;`
     : "    return 0.0f;";
@@ -2320,6 +2320,7 @@ ${content}
 
 #include "imgui.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <fstream>
